@@ -1,0 +1,6 @@
+# Upstream iPXE clones and build output. Neither belongs in git -- keeping
+# build output in git is the thing this repository exists to stop doing.
+/build/
+/output/
+*.tar.gz
+*.sha256

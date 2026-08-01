@@ -1,0 +1,74 @@
+# fog-ipxe
+
+iPXE sources, build configuration and prebuilt binaries for [FOG Project](https://github.com/FOGProject/fogproject).
+
+FOG boots clients with [iPXE](https://ipxe.org). This repository holds everything FOG layers on top of upstream iPXE — the feature selection, the boot scripts, and the build script — and publishes the resulting binaries as release assets.
+
+It exists so that `fogproject` does not have to carry 22 MB of build output in git, and so that "which iPXE is this server running?" has an answer. See [fogproject#959](https://github.com/FOGProject/fogproject/issues/959).
+
+## Most people do not need to build anything
+
+The FOG installer downloads these binaries from a release, checksums them, and drops them in the TFTP root. That is the whole story for an HTTP install, or an HTTPS install using a publicly trusted certificate.
+
+**There is exactly one reason to build locally:** HTTPS with your own CA. `CERT=`/`TRUST=` bake that certificate into the binary so iPXE can fetch `boot.php` over TLS, which makes it a per-server artifact no release can supply. The installer handles this for you when `httpproto` is `https`.
+
+## Layout
+
+```
+src/            BIOS build   — config headers + embedded boot scripts
+src-efi/        EFI build    — same, with EFI-specific feature selection
+autoexec.ipxe   boot script for the EMBED-less EFI binaries
+buildipxe.sh    the build
+```
+
+`src/` and `src-efi/` are near-identical, because most of what differs between them sits inside `#if defined ( PLATFORM_* )` guards and is inert in the other tree.
+
+### The config headers
+
+These are the FOG-specific part. They are **generated**, not hand-edited: start from the pristine upstream headers for whatever `IPXEVER` is pinned to, then apply an explicit table of FOG's deviations, each carrying the reason it exists.
+
+Do it that way and the next refresh is a re-run rather than a three-way diff, and "is this a FOG choice or is it drift?" is answerable by looking at one table. FOG previously refreshed these by copying upstream's wholesale, which silently disabled the BIOS console for anyone who rebuilt — see [fogproject#958](https://github.com/FOGProject/fogproject/issues/958).
+
+## Building
+
+```bash
+./buildipxe.sh [cert] [outdir]
+```
+
+Both arguments optional; defaults are the FOG CA if one is present and `./output`. Upstream clones land in `./build/`.
+
+The output tree mirrors FOG's `packages/tftp/` layout exactly, so it can be copied over a TFTP root unchanged:
+
+```
+output/                 BIOS + x86_64 EFI, boot script embedded
+output/i386-efi/        32-bit EFI
+output/arm64-efi/       arm64 EFI
+output/10secdelay/      as above, with a 10 second pre-DHCP sleep
+output/autoexec/        EFI with NO embedded script — reads autoexec.ipxe
+```
+
+Requirements: `git`, `make`, `gcc`, `binutils`, `perl`, `liblzma`, `mtools`, `xorriso`, and `gcc-aarch64-linux-gnu` for the arm64 binaries.
+
+### `IPXEVER`
+
+The upstream clone is pinned to a tag. Bumping it is a deliberate act — FOG spent years tracking `master`, which meant two people building on the same day could get different binaries.
+
+```bash
+IPXEVER=v2.0.1 ./buildipxe.sh
+```
+
+### The `autoexec/` binaries
+
+Built without `EMBED=`, so they read their boot script from `autoexec.ipxe` on the TFTP server instead of having it compiled in. Changing the boot logic stops requiring a rebuild — which is also why there is no `10secdelay` equivalent of them, the delay being a two-line edit.
+
+They are **opt-in**: point your DHCP `filename` at `autoexec/…`. A binary that finds no `autoexec.ipxe` falls through to plain `netboot()` and loses FOG's multi-NIC and proxyDHCP handling, so they must not be served to clients until the file is in place.
+
+This is also the only variant that can work under UEFI Secure Boot, since an embedded script is not permitted in a Secure Boot build. See the [Secure Boot how-to](https://docs.fogproject.org/kb/how-tos/secure-boot-signing/).
+
+## Offline installs
+
+Pre-place this checkout — and its `build/` clones — at `$fogprogramdir/ipxe` (default `/opt/fog/ipxe`). `buildipxe.sh` reuses an existing clone rather than fetching, so a machine with no internet access can still build.
+
+## Licence
+
+iPXE is GPLv2 (with a UBDL option); see upstream. The FOG-specific files here are GPLv3, matching `fogproject`.

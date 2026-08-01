@@ -1,0 +1,70 @@
+name: Build iPXE binaries
+
+# Push a tag to cut a release. Every other trigger builds without publishing,
+# so a pull request still proves the tree compiles -- which is the point of
+# moving these binaries out of fogproject in the first place: builds nobody
+# can reproduce are how the stale Makefile.housekeeping overlay and the
+# disabled BIOS console both went unnoticed for years.
+on:
+  push:
+    tags: ['v*']
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential liblzma-dev mtools xorriso isolinux \
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu perl git
+
+      - name: Build
+        # No cert argument: release binaries are the generic ones. An install
+        # that needs its own CA baked in builds locally, because that is a
+        # per-server artifact by definition.
+        run: ./buildipxe.sh
+
+      - name: Package
+        # One tarball, not 85 loose assets. Release assets cannot contain
+        # directories, so publishing them individually would mean mangling
+        # every path into a flat name and teaching the installer to unmangle
+        # it. The tree has structure -- i386-efi/, arm64-efi/, autoexec/ --
+        # and a tarball preserves it for free. A single checksum then covers
+        # every file, rather than 85 chances to get one verification wrong.
+        run: |
+          tar -czf fog-ipxe-${{ github.ref_name }}.tar.gz -C output .
+          # Plain `sha256sum -c`-consumable form, matching how the FOS
+          # release hashes are shaped, so the installer can verify it with the
+          # same loop it already uses.
+          sha256sum fog-ipxe-${{ github.ref_name }}.tar.gz \
+            > fog-ipxe-${{ github.ref_name }}.tar.gz.sha256
+          cat fog-ipxe-${{ github.ref_name }}.tar.gz.sha256
+
+      - name: Upload build artefacts
+        # Keeps a downloadable tree on every PR and branch build, so a change
+        # can be inspected before anyone tags it.
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipxe-binaries
+          path: output/
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            "fog-ipxe-${{ github.ref_name }}.tar.gz" \
+            "fog-ipxe-${{ github.ref_name }}.tar.gz.sha256"
