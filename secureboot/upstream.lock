@@ -1,0 +1,47 @@
+# Pinned upstream artefacts for the Secure Boot asset set.
+#
+# FOG cannot build these. A Secure Boot chain needs binaries signed by keys FOG
+# does not hold -- Microsoft's, for the shim, and iPXE's, for the loader it
+# chains to. So this repo republishes upstream's, byte for byte, and the whole
+# job of the staging script is proving that is what it did.
+#
+# Bumping anything here is a reviewable diff, which is the point: it is the
+# only place a version or a hash changes, and a stale pin is visible in git
+# rather than buried in a workflow.
+#
+# Sourced by secureboot/stage.sh.
+
+# --- iPXE ---------------------------------------------------------------
+# The signed snponly.efi comes out of upstream's ipxeboot.tar.gz.
+#
+# IPXE_RELEASE must match IPXEVER in buildipxe.sh. It is asserted rather than
+# derived: if the two drift, Secure Boot clients would run a different iPXE
+# release from every other client on the same server, which is exactly the
+# class of "which binary is this site actually using?" ambiguity that moving
+# these builds out of fogproject was meant to end. Bump both together or the
+# staging step fails.
+IPXE_RELEASE="v2.0.0"
+IPXEBOOT_SHA256="01a526d4cc791fc30362259c609d6c506cc64a7bdff51b9a5eb788354e17eee1"
+
+# Signer of x86_64-sb/snponly.efi and arm64-sb/snponly.efi.
+IPXE_SIGNER_SUBJECT="CN=iPXE Secure Boot Automatic Code Signing G1A"
+IPXE_SIGNER_ISSUER="CN=iPXE Secure Boot Intermediate G1A"
+
+# --- shim ---------------------------------------------------------------
+# Pinned separately: ipxe/shim is a different project on a different cadence,
+# and shim releases track Microsoft signing events rather than iPXE releases.
+#
+# Taken from the ipxe/shim release rather than the copy bundled inside
+# ipxeboot.tar.gz, because the bundled one carries ONLY the Microsoft UEFI CA
+# 2011 signature. Hardware shipping just the 2023 certificate will not load it.
+SHIM_RELEASE="ipxe-16.1"
+SHIM_X64_SHA256="5eecca2780bd49c900565e124516a1bd666ec5e012825f34991b6ba1ef2fa6cf"
+SHIM_AA64_SHA256="31c6d8ef9ed24dc810dd7b951cf86b2e9036a02dea8a32548c0e1c0ae4d6f1c9"
+MM_X64_SHA256="ccb0c430608f453398c8f97004a97aadbafeade952740822bee616fff2aa9b7f"
+MM_AA64_SHA256="5cf640f269acd0a4af07ec2fa4633f8bc8486d411fa73659f9d057c3f75152ce"
+
+# BOTH are asserted. Dual signing is the entire reason for preferring this
+# shim, so a silent regression to a 2011-only build must fail the release
+# rather than ship and strand anyone on 2023-only firmware.
+SHIM_SIGNER_2011="CN=Microsoft Corporation UEFI CA 2011"
+SHIM_SIGNER_2023="CN=Microsoft UEFI CA 2023"

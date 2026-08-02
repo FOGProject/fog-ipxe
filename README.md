@@ -19,6 +19,7 @@ src/            BIOS build   — config headers + embedded boot scripts
 src-efi/        EFI build    — same, with EFI-specific feature selection
 autoexec.ipxe   boot script for the EMBED-less EFI binaries
 buildipxe.sh    the build
+secureboot/     pinned upstream signed binaries — republished, not built
 ```
 
 `src/` and `src-efi/` are near-identical, because most of what differs between them sits inside `#if defined ( PLATFORM_* )` guards and is inert in the other tree.
@@ -64,6 +65,32 @@ Built without `EMBED=`, so they read their boot script from `autoexec.ipxe` on t
 They are **opt-in**: point your DHCP `filename` at `autoexec/…`. A binary that finds no `autoexec.ipxe` falls through to plain `netboot()` and loses FOG's multi-NIC and proxyDHCP handling, so they must not be served to clients until the file is in place.
 
 This is also the only variant that can work under UEFI Secure Boot, since an embedded script is not permitted in a Secure Boot build. See the [Secure Boot how-to](https://docs.fogproject.org/kb/how-tos/secure-boot-signing/).
+
+## Secure Boot
+
+A second release asset, `fog-ipxe-secureboot-<tag>.tar.gz`, carries the pieces a Secure Boot chain needs that FOG **cannot build**: they have to be signed by keys FOG does not hold — Microsoft's, for the shim, and iPXE's, for the loader it chains to.
+
+```
+secureboot/snponly-shimx64.efi   ipxe/shim, signed by Microsoft (2011 + 2023)
+secureboot/snponly.efi           upstream's signed iPXE
+secureboot/mmx64.efi             MokManager, for enrolling your own key
+secureboot/autoexec.ipxe         this repo's own boot script
+secureboot/arm64-efi/…           the same set for arm64
+secureboot/MANIFEST              what was taken from where, with hashes
+```
+
+Everything but `autoexec.ipxe` is upstream's, republished byte for byte. `secureboot/upstream.lock` pins the release tags and the sha256 of every file; `secureboot/stage.sh` fetches them, checks those hashes, and reads the PE certificate table back to assert each binary is signed by the key it should be. A mismatch fails the release rather than shipping — an unsigned or test-signed binary that reaches an install surfaces at the client as "Security Policy Violation" with nothing server-side to explain it.
+
+Staging runs on **every** build, not just tags, so a pull request proves the pins still resolve.
+
+Two things worth knowing about the layout:
+
+- **`snponly-shimx64.efi` is a rename, and the name is the mechanism.** shim picks its second stage by rewriting its own `-shim<arch>.efi` filename suffix to `.efi`, so this one loads `snponly.efi`. Under shim's stock name it would load `ipxe.efi` — the all-drivers build, which hangs wherever native NIC takeover fails. The suffix match allows `-shim` plus at most four more characters, and `-shimaa64` is exactly at that limit: do not lengthen these names.
+- **`autoexec.ipxe` must sit beside the binaries**, because iPXE resolves the bare name against `cwuri`.
+
+A Secure Boot chain still needs one thing this release cannot supply: the FOS kernel is unsigned, so it has to be signed with your own key and that key enrolled via MokManager. See the [Secure Boot how-to](https://docs.fogproject.org/kb/how-tos/secure-boot-signing/).
+
+Bumping a pin is a reviewable one-file diff. `IPXE_RELEASE` is asserted against `IPXEVER` in `buildipxe.sh` rather than derived from it — if the two drift, Secure Boot clients run a different iPXE release from every other client on the same server.
 
 ## Offline installs
 
