@@ -2,5 +2,8 @@
 # build output in git is the thing this repository exists to stop doing.
 /build/
 /output/
+# Staged copies of upstream's signed binaries. Republished at release time,
+# never committed -- the pins in secureboot/upstream.lock are the record.
+/sb-output/
 *.tar.gz
 *.sha256

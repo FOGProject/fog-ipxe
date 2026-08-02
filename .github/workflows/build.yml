@@ -18,6 +18,13 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      # github.ref_name is "<n>/merge" on a pull_request, which contains a slash
+      # and is therefore not a legal filename -- `tar -czf fog-ipxe-1/merge...`
+      # fails with "Cannot open: No such file or directory". Only tag builds
+      # publish, so every other build just needs a name that proves packaging
+      # works. Went unnoticed because this repository had had no pull requests.
+      PKGVER: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,13 +33,26 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential liblzma-dev mtools xorriso isolinux \
-            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu perl git
+            gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu perl git \
+            sbsigntool
 
       - name: Build
         # No cert argument: release binaries are the generic ones. An install
         # that needs its own CA baked in builds locally, because that is a
         # per-server artifact by definition.
         run: ./buildipxe.sh
+
+      - name: Stage Secure Boot asset set
+        # Published as a SEPARATE asset, not folded into the main tarball, for
+        # two reasons: everything in the main tarball is a binary this workflow
+        # built, and these are not -- they are upstream's, republished; and a
+        # site that does not want third-party signed blobs can simply not fetch
+        # this one.
+        #
+        # Runs on every trigger, not just tags, so a PR proves the pins still
+        # resolve and the signers still match. Finding out at tag time that
+        # upstream rotated a certificate is finding out too late.
+        run: ./secureboot/stage.sh sb-output
 
       - name: Package
         # One tarball, not 85 loose assets. Release assets cannot contain
@@ -42,13 +62,20 @@ jobs:
         # and a tarball preserves it for free. A single checksum then covers
         # every file, rather than 85 chances to get one verification wrong.
         run: |
-          tar -czf fog-ipxe-${{ github.ref_name }}.tar.gz -C output .
+          tar -czf fog-ipxe-${PKGVER}.tar.gz -C output .
           # Plain `sha256sum -c`-consumable form, matching how the FOS
           # release hashes are shaped, so the installer can verify it with the
           # same loop it already uses.
-          sha256sum fog-ipxe-${{ github.ref_name }}.tar.gz \
-            > fog-ipxe-${{ github.ref_name }}.tar.gz.sha256
-          cat fog-ipxe-${{ github.ref_name }}.tar.gz.sha256
+          sha256sum fog-ipxe-${PKGVER}.tar.gz \
+            > fog-ipxe-${PKGVER}.tar.gz.sha256
+          cat fog-ipxe-${PKGVER}.tar.gz.sha256
+
+          # Same shape for the Secure Boot set, so the installer can verify it
+          # with the loop it already uses for the other two.
+          tar -czf fog-ipxe-secureboot-${PKGVER}.tar.gz -C sb-output .
+          sha256sum fog-ipxe-secureboot-${PKGVER}.tar.gz \
+            > fog-ipxe-secureboot-${PKGVER}.tar.gz.sha256
+          cat fog-ipxe-secureboot-${PKGVER}.tar.gz.sha256
 
       - name: Upload build artefacts
         # Keeps a downloadable tree on every PR and branch build, so a change
@@ -58,6 +85,12 @@ jobs:
           name: ipxe-binaries
           path: output/
 
+      - name: Upload Secure Boot artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ipxe-secureboot
+          path: sb-output/
+
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         env:
@@ -66,5 +99,7 @@ jobs:
           gh release create "${{ github.ref_name }}" \
             --title "${{ github.ref_name }}" \
             --generate-notes \
-            "fog-ipxe-${{ github.ref_name }}.tar.gz" \
-            "fog-ipxe-${{ github.ref_name }}.tar.gz.sha256"
+            "fog-ipxe-${PKGVER}.tar.gz" \
+            "fog-ipxe-${PKGVER}.tar.gz.sha256" \
+            "fog-ipxe-secureboot-${PKGVER}.tar.gz" \
+            "fog-ipxe-secureboot-${PKGVER}.tar.gz.sha256"
