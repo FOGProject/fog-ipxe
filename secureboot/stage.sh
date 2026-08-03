@@ -114,14 +114,19 @@ fetch "${SHIM_BASE}/mmaa64.efi"        "$work/mmaa64.efi"        "$MM_AA64_SHA25
 fetch "${IPXE_BASE}/ipxeboot.tar.gz"   "$work/ipxeboot.tar.gz"   "$IPXEBOOT_SHA256"
 
 tar xzf "$work/ipxeboot.tar.gz" -C "$work" \
-    ipxeboot/x86_64-sb/snponly.efi ipxeboot/arm64-sb/snponly.efi
+    ipxeboot/x86_64-sb/snponly.efi ipxeboot/x86_64-sb/ipxe.efi \
+    ipxeboot/arm64-sb/snponly.efi  ipxeboot/arm64-sb/ipxe.efi
 
 echo "Verifying signers"
 assert_signer "$work/ipxe-shimx64.efi"  "$SHIM_SIGNER_2011" "$SHIM_SIGNER_2023"
 assert_signer "$work/ipxe-shimaa64.efi" "$SHIM_SIGNER_2011" "$SHIM_SIGNER_2023"
 assert_signer "$work/ipxeboot/x86_64-sb/snponly.efi" \
     "$IPXE_SIGNER_SUBJECT" "$IPXE_SIGNER_ISSUER"
+assert_signer "$work/ipxeboot/x86_64-sb/ipxe.efi" \
+    "$IPXE_SIGNER_SUBJECT" "$IPXE_SIGNER_ISSUER"
 assert_signer "$work/ipxeboot/arm64-sb/snponly.efi" \
+    "$IPXE_SIGNER_SUBJECT" "$IPXE_SIGNER_ISSUER"
+assert_signer "$work/ipxeboot/arm64-sb/ipxe.efi" \
     "$IPXE_SIGNER_SUBJECT" "$IPXE_SIGNER_ISSUER"
 
 # The rename IS the mechanism, so it happens here -- once, in a reviewed file
@@ -137,17 +142,34 @@ assert_signer "$work/ipxeboot/arm64-sb/snponly.efi" \
 #
 # The suffix match allows "-shim" plus up to four more characters before
 # ".efi". "-shimaa64" is exactly nine and therefore exactly at the limit --
-# do not lengthen these names.
+# do not lengthen these names. Only the suffix is matched, so the "ipxe-"
+# prefix below costs nothing.
 #
-# Only the snponly variant is published. An ipxe-shim*.efi alias would need
-# ipxe.efi staged beside it or it chains to a file that is not there.
+# BOTH pairs are published, because neither loader works everywhere:
+#   snponly.efi drives the NIC through the firmware's own UEFI SNP protocol.
+#   Right answer by default -- it is whatever the vendor shipped and tested --
+#   but it is dead in the water on firmware whose SNP is broken or absent.
+#   ipxe.efi carries iPXE's native drivers and takes the NIC over from the
+#   firmware. Recovers exactly those machines, and hangs on the ones where the
+#   takeover fails.
+#
+# Non-Secure-Boot installs have had both since forever and admins switch
+# between them by changing DHCP option 67. Publishing only the snponly pair
+# made Secure Boot the one path with no fallback, so a site whose firmware SNP
+# is broken had nothing to move to. Each pair is self-contained -- shim resolves
+# its second stage from its OWN name -- so the two sit side by side in the same
+# directory and DHCP alone picks which chain runs.
 echo "Staging"
 mkdir -p "$out/secureboot/arm64-efi"
 install -m 0644 "$work/ipxeboot/x86_64-sb/snponly.efi" "$out/secureboot/snponly.efi"
 install -m 0644 "$work/ipxe-shimx64.efi"  "$out/secureboot/snponly-shimx64.efi"
+install -m 0644 "$work/ipxeboot/x86_64-sb/ipxe.efi"    "$out/secureboot/ipxe.efi"
+install -m 0644 "$work/ipxe-shimx64.efi"  "$out/secureboot/ipxe-shimx64.efi"
 install -m 0644 "$work/mmx64.efi"         "$out/secureboot/mmx64.efi"
 install -m 0644 "$work/ipxeboot/arm64-sb/snponly.efi" "$out/secureboot/arm64-efi/snponly.efi"
 install -m 0644 "$work/ipxe-shimaa64.efi" "$out/secureboot/arm64-efi/snponly-shimaa64.efi"
+install -m 0644 "$work/ipxeboot/arm64-sb/ipxe.efi"    "$out/secureboot/arm64-efi/ipxe.efi"
+install -m 0644 "$work/ipxe-shimaa64.efi" "$out/secureboot/arm64-efi/ipxe-shimaa64.efi"
 install -m 0644 "$work/mmaa64.efi"        "$out/secureboot/arm64-efi/mmaa64.efi"
 
 # autoexec.ipxe has to sit beside the binaries: iPXE resolves the bare name
@@ -173,15 +195,19 @@ install -m 0644 "$repo/autoexec.ipxe" "$out/secureboot/arm64-efi/autoexec.ipxe"
     }
     manifest_row "secureboot/snponly.efi"                    "${IPXE_BASE}/ipxeboot.tar.gz!ipxeboot/x86_64-sb/snponly.efi"
     manifest_row "secureboot/snponly-shimx64.efi"            "${SHIM_BASE}/ipxe-shimx64.efi"
+    manifest_row "secureboot/ipxe.efi"                       "${IPXE_BASE}/ipxeboot.tar.gz!ipxeboot/x86_64-sb/ipxe.efi"
+    manifest_row "secureboot/ipxe-shimx64.efi"               "${SHIM_BASE}/ipxe-shimx64.efi"
     manifest_row "secureboot/mmx64.efi"                      "${SHIM_BASE}/mmx64.efi"
     manifest_row "secureboot/arm64-efi/snponly.efi"          "${IPXE_BASE}/ipxeboot.tar.gz!ipxeboot/arm64-sb/snponly.efi"
     manifest_row "secureboot/arm64-efi/snponly-shimaa64.efi" "${SHIM_BASE}/ipxe-shimaa64.efi"
+    manifest_row "secureboot/arm64-efi/ipxe.efi"             "${IPXE_BASE}/ipxeboot.tar.gz!ipxeboot/arm64-sb/ipxe.efi"
+    manifest_row "secureboot/arm64-efi/ipxe-shimaa64.efi"    "${SHIM_BASE}/ipxe-shimaa64.efi"
     manifest_row "secureboot/arm64-efi/mmaa64.efi"           "${SHIM_BASE}/mmaa64.efi"
     echo
     echo "# Signers asserted at release time:"
     echo "#   shim     ${SHIM_SIGNER_2011}"
     echo "#   shim     ${SHIM_SIGNER_2023}"
-    echo "#   snponly  ${IPXE_SIGNER_SUBJECT}"
+    echo "#   loaders  ${IPXE_SIGNER_SUBJECT}"
     echo "#"
     echo "# autoexec.ipxe is FOG's own, from this repo, not upstream."
 } > "$out/secureboot/MANIFEST"

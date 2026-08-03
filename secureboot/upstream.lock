@@ -12,7 +12,9 @@
 # Sourced by secureboot/stage.sh.
 
 # --- iPXE ---------------------------------------------------------------
-# The signed snponly.efi comes out of upstream's ipxeboot.tar.gz.
+# The signed snponly.efi and ipxe.efi both come out of upstream's
+# ipxeboot.tar.gz, so IPXEBOOT_SHA256 already covers both and neither needs a
+# hash of its own here.
 #
 # IPXE_RELEASE must match IPXEVER in buildipxe.sh. It is asserted rather than
 # derived: if the two drift, Secure Boot clients would run a different iPXE
@@ -23,7 +25,7 @@
 IPXE_RELEASE="v2.0.0"
 IPXEBOOT_SHA256="01a526d4cc791fc30362259c609d6c506cc64a7bdff51b9a5eb788354e17eee1"
 
-# Signer of x86_64-sb/snponly.efi and arm64-sb/snponly.efi.
+# Signer of the snponly.efi and ipxe.efi under x86_64-sb/ and arm64-sb/.
 IPXE_SIGNER_SUBJECT="CN=iPXE Secure Boot Automatic Code Signing G1A"
 IPXE_SIGNER_ISSUER="CN=iPXE Secure Boot Intermediate G1A"
 
