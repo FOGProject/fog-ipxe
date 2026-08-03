@@ -13,27 +13,34 @@
 # that script and the ones that fetch this one must behave identically, or
 # which file a site is using becomes a variable in every bug report. Refs
 # GH-957.
+echo Checking net0 for DHCP...
 isset ${net0/mac} && ifopen net0 && dhcp net0 || goto dhcpnet1
 echo Received DHCP answer on interface net0 && goto proxycheck
 
 :dhcpnet1
+echo Checking net1 for DHCP...
 isset ${net1/mac} && ifopen net1 && dhcp net1 || goto dhcpnet2
 echo Received DHCP answer on interface net1 && goto proxycheck
 
 :dhcpnet2
+echo Checking net2 for DHCP...
 isset ${net2/mac} && ifopen net2 && dhcp net2 || goto dhcpall
 echo Received DHCP answer on interface net2 && goto proxycheck
 
 :dhcpall
+echo No DHCP answer on any interface, trying proxy DHCP...
 dhcp && goto proxycheck || goto dhcperror
 
 :dhcperror
+echo DHCP error!
 prompt --key s --timeout 10000 DHCP failed, hit 's' for the iPXE shell; reboot in 10 seconds && shell || reboot
 
 :proxycheck
+echo Trying proxy DHCP...
 isset ${proxydhcp/next-server} && set next-server ${proxydhcp/next-server} || goto nextservercheck
 
 :nextservercheck
+echo Checking for next-server...
 isset ${next-server} && goto netboot || goto setserv
 
 :setserv
@@ -43,4 +50,5 @@ echo -n Please enter tftp server: && read next-server && goto netboot || goto se
 prompt --key s --timeout 10000 Chainloading failed, hit 's' for the iPXE shell; reboot in 10 seconds && shell || reboot
 
 :netboot
+echo starting netboot to default.ipxe...
 chain tftp://${next-server}/default.ipxe || goto chainloadfailed
