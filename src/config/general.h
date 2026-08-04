@@ -153,6 +153,51 @@ FILE_SECBOOT ( PERMITTED );
   #undef VLAN_CMD
 #endif
 
+/* FOG deviation: re-enable the whole of upstream's BIOS trim list above.
+ *
+ * "Historically" there means upstream's history, not FOG's. FOG had all eight
+ * of these enabled for pcbios until f61a90d97 (fogproject, 2026-01-26) copied
+ * upstream master's headers in wholesale and brought this block along with it.
+ * Before that commit the header carried no PLATFORM_pcbios block at all. The
+ * a02a2c2cd rebase caught three other flips from that same copy (CONSOLE_PCBIOS,
+ * ACPI_SETTINGS, DOWNLOAD_PROTO_FILE) but not these, so they survived the
+ * rebase intact.
+ *
+ * It stayed invisible because fogproject shipped committed prebuilt binaries
+ * until 182701dd6 moved iPXE here; only -S/--force-https installs rebuilt, so
+ * only they were affected. Now every install boots what this file builds.
+ *
+ * Two of the eight are load-bearing for FOG, not diagnostics:
+ *   PARAM_CMD   - the installer's generated default.ipxe opens with "params" +
+ *                 ten "param" lines and chains with "boot.php##params", and
+ *                 bootmenu.class.php emits param/params 46 more times. Without
+ *                 it a legacy-BIOS client prints "params: command not found"
+ *                 and dies on "Could not boot: Exec format error". Every BIOS
+ *                 PXE boot fails. Confirmed on a VirtualBox BIOS client, 1.6.
+ *   CONSOLE_CMD - bootmenu.class.php uses "console --picture" for the boot menu
+ *                 background image, and gates its first sanboot variant on
+ *                 "console && sanboot --drive 0". Without it the background
+ *                 silently never renders and BIOS clients quietly fall through
+ *                 to sanboot --drive 0x80 instead.
+ * The other six are the diagnostic commands FOG's documentation leans on, and
+ * were equally unintended casualties. Restoring the set returns BIOS builds to
+ * what FOG actually shipped and tested for years.
+ *
+ * Kept as an explicit override AFTER upstream's block rather than by deleting
+ * lines from it, so the next refresh onto a new upstream tag diffs cleanly and
+ * this stays visibly a FOG choice rather than looking like more drift.
+ */
+#if defined ( PLATFORM_pcbios )
+  #define CERT_CMD		/* Certificate management commands */
+  #define CONSOLE_CMD		/* Console command */
+  #define DIGEST_CMD		/* Image crypto digest commands */
+  #define NTP_CMD		/* NTP commands */
+  #define PARAM_CMD		/* Request parameter commands */
+  #define PCI_CMD		/* PCI commands */
+  #define USB_CMD		/* USB commands */
+  #define VLAN_CMD		/* VLAN commands */
+#endif
+
 /*****************************************************************************
  *
  * Image types
