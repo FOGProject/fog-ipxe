@@ -88,8 +88,11 @@ cp ${FOGDIR}/src/ipxescript10sec .
 cp ${FOGDIR}/src/config/general.h config/
 cp ${FOGDIR}/src/config/settings.h config/
 cp ${FOGDIR}/src/config/console.h config/
-# For BIOS builds, disable USB_HCD_USBIO as it's EFI-specific
-sed -i 's+#define	USB_HCD_USBIO+//#define	USB_HCD_USBIO+g' config/usb.h
+# USB settings go in as an overlaid config/local/usb.h, which upstream's
+# config/usb.h includes last so our values win. This used to be a sed against
+# upstream's file; see src-efi/config/local/usb.h for why that had to go.
+mkdir -p config/local
+cp ${FOGDIR}/src/config/local/usb.h config/local/
 
 # Build the files
 make -j$(nproc) EMBED=ipxescript bin/ipxe.iso bin/{undionly,ipxe,intel,realtek}.{,k,kk}pxe bin/ipxe.lkrn bin/ipxe.usb ${BUILDOPTS}
@@ -130,10 +133,12 @@ cp ${FOGDIR}/src-efi/ipxescript10sec .
 cp ${FOGDIR}/src-efi/config/general.h config/
 cp ${FOGDIR}/src-efi/config/settings.h config/
 cp ${FOGDIR}/src-efi/config/console.h config/
-# For EFI builds, enable USB_HCD_USBIO for keyboard support and disable conflicting USB_EFI
-sed -i 's+//#define	USB_HCD_USBIO+#define	USB_HCD_USBIO+g' config/usb.h
-sed -i 's+//#undef	USB_KEYBOARD+#define	USB_KEYBOARD+g' config/usb.h
-sed -i 's+//#undef	USB_EFI+#undef	USB_EFI+g' config/usb.h
+# USB keyboard support. Overlaid rather than sed-patched into upstream's
+# config/usb.h -- v2.0.0 restructured that file and every sed pattern silently
+# stopped matching, which is what broke the keyboard on ipxe.efi. See
+# src-efi/config/local/usb.h.
+mkdir -p config/local
+cp ${FOGDIR}/src-efi/config/local/usb.h config/local/
 
 # Build the files
 make -j$(nproc) EMBED=ipxescript bin-{i386,x86_64}-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
