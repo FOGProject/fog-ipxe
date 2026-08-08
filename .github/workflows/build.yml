@@ -42,6 +42,17 @@ jobs:
         # per-server artifact by definition.
         run: ./buildipxe.sh
 
+      - name: Check for iPXE option drift
+        # Fails when a shipped binary's feature set changes without the matching
+        # baseline being updated in the same commit. Ten options were lost to a
+        # single wholesale header copy and took six releases to find, one
+        # symptom report at a time; this is what makes the eleventh impossible
+        # to ship unnoticed. See tools/check-linked-objects.sh for the history.
+        #
+        # Deliberately AFTER the build and BEFORE publishing: a tag build that
+        # trips this stops without cutting a release, which is the whole point.
+        run: ./tools/check-linked-objects.sh
+
       - name: Stage Secure Boot asset set
         # Published as a SEPARATE asset, not folded into the main tarball, for
         # two reasons: everything in the main tarball is a binary this workflow

@@ -72,6 +72,41 @@ FILE_SECBOOT ( PERMITTED );
   #undef CONSOLE_SYSLOGS
 #endif
 
+/* FOG deviation: restore the framebuffer console on BIOS builds.
+ *
+ * Same cause and same shape as the command trim list in general.h -- this is
+ * upstream's console-type trim list, and it arrived with the same wholesale
+ * header copy in f61a90d97 (fogproject, 2026-01-26). FOG's console.h carried a
+ * plain "#define CONSOLE_FRAMEBUFFER" and no PLATFORM_pcbios block at all
+ * before that commit, so BIOS builds have always had it. Restoring the eight
+ * commands (fog-ipxe#3, v2.0.0-fog.4) fixed the trim list one file over but
+ * left this one, so CONSOLE_CMD came back while the console it drives did not.
+ *
+ * CONSOLE_FRAMEBUFFER is what pulls in vesafb (arch/x86/interface/pcbios/) and
+ * fbcon -- the only graphical console a BIOS build can have; EFI gets its own
+ * via efifb, which is why this is invisible to UEFI testing.
+ *
+ * bootmenu.class.php emits "console --picture <booturl>/ipxe/bg.png --left 100
+ * --right 80 && goto console_set || goto alt_console". Without a console that
+ * implements .configure, console_configure() has nothing to hand the pixbuf to
+ * and returns success, so the command *silently* succeeds having drawn
+ * nothing: the picture is downloaded, PNG-decoded, and dropped. The menu then
+ * renders as unstyled text on black and the alt_console fallback -- the thing
+ * meant to catch exactly this -- never fires because nothing reported failure.
+ * Reported on the forums for dev-branch/undionly.kpxe, 2026-08-08.
+ *
+ * Only CONSOLE_FRAMEBUFFER is restored; FOG has never used the syslog consoles
+ * and leaving those undefined keeps the BIOS binary's size increase to what
+ * the boot menu actually needs.
+ *
+ * Kept as an explicit override AFTER upstream's block, matching general.h, so
+ * the next refresh onto a new upstream tag diffs cleanly and this reads as a
+ * FOG choice rather than more drift.
+ */
+#if defined ( PLATFORM_pcbios )
+  #define CONSOLE_FRAMEBUFFER	/* Graphical framebuffer console */
+#endif
+
 /*****************************************************************************
  *
  * Keyboard maps

@@ -43,9 +43,9 @@ FILE_SECBOOT ( PERMITTED );
 #define DOWNLOAD_PROTO_TFTP	/* Trivial File Transfer Protocol */
 #define DOWNLOAD_PROTO_HTTP	/* Hypertext Transfer Protocol */
 #define DOWNLOAD_PROTO_HTTPS	/* Secure Hypertext Transfer Protocol */
-//#define DOWNLOAD_PROTO_FTP	/* File Transfer Protocol */
+#define DOWNLOAD_PROTO_FTP	/* File Transfer Protocol */
 //#define DOWNLOAD_PROTO_SLAM	/* Scalable Local Area Multicast */
-//#define DOWNLOAD_PROTO_NFS	/* Network File System Protocol */
+#define DOWNLOAD_PROTO_NFS	/* Network File System Protocol */
 
 /* Protocols supported only on platforms with filesystem abstractions */
 #if defined ( PLATFORM_efi )

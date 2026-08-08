@@ -33,6 +33,14 @@ FILE_SECBOOT ( PERMITTED );
   #undef NET_PROTO_LLDP
 #endif
 
+/* FOG deviation: see the note above the command trim list below. FOG had
+ * NET_PROTO_LLDP on for BIOS before f61a90d97. NET_PROTO_IPV6 was off in FOG's
+ * own header and stays off -- upstream's undef agrees with FOG here, so there
+ * is nothing to restore. */
+#if defined ( PLATFORM_pcbios )
+  #define NET_PROTO_LLDP		/* Link Layer Discovery protocol */
+#endif
+
 /*****************************************************************************
  *
  * Download protocols
@@ -43,9 +51,9 @@ FILE_SECBOOT ( PERMITTED );
 #define DOWNLOAD_PROTO_TFTP	/* Trivial File Transfer Protocol */
 #define DOWNLOAD_PROTO_HTTP	/* Hypertext Transfer Protocol */
 #define DOWNLOAD_PROTO_HTTPS	/* Secure Hypertext Transfer Protocol */
-//#define DOWNLOAD_PROTO_FTP	/* File Transfer Protocol */
+#define DOWNLOAD_PROTO_FTP	/* File Transfer Protocol */
 //#define DOWNLOAD_PROTO_SLAM	/* Scalable Local Area Multicast */
-//#define DOWNLOAD_PROTO_NFS	/* Network File System Protocol */
+#define DOWNLOAD_PROTO_NFS	/* Network File System Protocol */
 
 /* Protocols supported only on platforms with filesystem abstractions */
 #if defined ( PLATFORM_efi )
@@ -63,6 +71,33 @@ FILE_SECBOOT ( PERMITTED );
 #if defined ( PLATFORM_pcbios )
   #undef DOWNLOAD_PROTO_HTTPS
   #undef HTTP_AUTH_NTLM
+#endif
+
+/* FOG deviation: restore HTTPS on BIOS builds.
+ *
+ * This is the most damaging line f61a90d97 brought in, and the one its own
+ * commit message ("Fix iPXE compilation error for HTTPS FOG Installs") makes
+ * hardest to believe. Without DOWNLOAD_PROTO_HTTPS there is no
+ * https_uri_opener in the binary at all, so a legacy-BIOS client cannot fetch
+ * an https:// URL by any route.
+ *
+ * FOG hands it one on every -S/--force-https install: the installer writes
+ * "chain ${httpproto}://$ipaddress${webroot}service/ipxe/boot.php##params"
+ * into default.ipxe, and bootmenu.class.php builds every URL after that from
+ * the same protocol. So on an HTTPS server every BIOS client chainloads
+ * default.ipxe over TFTP, fails to open the very first https:// URL, and lands
+ * in ipxescript's "Chainloading failed" reboot loop.
+ *
+ * Those installs are also exactly the ones that build from this tree rather
+ * than downloading a release asset, because CERT=/TRUST= bake a per-server CA
+ * into the binary -- and baking a CA into a binary that cannot speak TLS to a
+ * server is the whole feature undoing itself.
+ *
+ * HTTP_AUTH_NTLM is deliberately NOT restored: FOG's header never had it, so
+ * upstream's undef and FOG's intent agree.
+ */
+#if defined ( PLATFORM_pcbios )
+  #define DOWNLOAD_PROTO_HTTPS	/* Secure Hypertext Transfer Protocol */
 #endif
 
 /*****************************************************************************
@@ -115,7 +150,7 @@ FILE_SECBOOT ( PERMITTED );
 #define PCI_CMD			/* PCI commands */
 #define PING_CMD		/* Ping command */
 //#define PROFSTAT_CMD		/* Profiling commands */
-//#define PXE_CMD		/* PXE commands */
+#define PXE_CMD			/* PXE commands */
 #define ROUTE_CMD		/* Routing table management commands */
 #define SANBOOT_CMD		/* SAN boot commands */
 #define SHELL_CMD		/* Shell command */
