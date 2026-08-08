@@ -55,6 +55,15 @@
 # with --update and commit the new baseline alongside the change that caused it.
 set -euo pipefail
 
+# The baseline is a sorted list compared with diff, so the sort has to mean the
+# same thing everywhere. Glibc's default collation ignores punctuation at the
+# first pass, so en_US.UTF-8 orders "ipstat_cmd.o" and "ipstat.o" one way and
+# C orders them the other. Without this the check fails on a developer box or a
+# CI runner purely because its locale differs, reporting every object as both
+# removed and added -- which is exactly what the first CI run of this script
+# did. LC_ALL=C makes the byte order the contract.
+export LC_ALL=C
+
 FOGDIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 BASE="${FOGDIR}/build"
 BASELINEDIR="${FOGDIR}/tools/linked-objects"
