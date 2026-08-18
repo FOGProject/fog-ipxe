@@ -17,7 +17,8 @@ The FOG installer downloads these binaries from a release, checksums them, and d
 ```
 src/            BIOS build   — config headers + embedded boot scripts
 src-efi/        EFI build    — same, with EFI-specific feature selection
-autoexec.ipxe   boot script for the EMBED-less EFI binaries
+                               (config headers only; EFI embeds no script)
+autoexec.ipxe   the boot script every EFI binary downloads and runs
 buildipxe.sh    the build
 secureboot/     pinned upstream signed binaries — republished, not built
 ```
@@ -41,11 +42,10 @@ Both arguments optional; defaults are the FOG CA if one is present and `./output
 The output tree mirrors FOG's `packages/tftp/` layout exactly, so it can be copied over a TFTP root unchanged:
 
 ```
-output/                 BIOS + x86_64 EFI, boot script embedded
-output/i386-efi/        32-bit EFI
-output/arm64-efi/       arm64 EFI
-output/10secdelay/      as above, with a 10 second pre-DHCP sleep
-output/autoexec/        EFI with NO embedded script — reads autoexec.ipxe
+output/                 BIOS (script embedded) + x86_64 EFI + autoexec.ipxe
+output/i386-efi/        32-bit EFI + autoexec.ipxe
+output/arm64-efi/       arm64 EFI + autoexec.ipxe
+output/10secdelay/      BIOS only, with a 10 second pre-DHCP sleep
 ```
 
 Requirements: `git`, `make`, `gcc`, `binutils`, `perl`, `liblzma`, `mtools`, `xorriso`, and `gcc-aarch64-linux-gnu` for the arm64 binaries.
@@ -58,13 +58,31 @@ The upstream clone is pinned to a tag. Bumping it is a deliberate act — FOG sp
 IPXEVER=v2.0.1 ./buildipxe.sh
 ```
 
-### The `autoexec/` binaries
+### Boot scripts: EFI reads `autoexec.ipxe`, BIOS embeds one
 
-Built without `EMBED=`, so they read their boot script from `autoexec.ipxe` on the TFTP server instead of having it compiled in. Changing the boot logic stops requiring a rebuild — which is also why there is no `10secdelay` equivalent of them, the delay being a two-line edit.
+No EFI binary here is built with `EMBED=`. Each one downloads `autoexec.ipxe`
+from the directory it was itself loaded from — falling back to the TFTP root —
+and executes it, because with nothing compiled in `first_image()` finds no
+image ahead of it. Changing the boot logic is therefore editing one text file,
+with no toolchain and no rebuild. It is also the only shape that works under
+UEFI Secure Boot, since an embedded script is not permitted in a Secure Boot
+build. See the [Secure Boot how-to](https://docs.fogproject.org/kb/how-tos/secure-boot-signing/).
 
-They are **opt-in**: point your DHCP `filename` at `autoexec/…`. A binary that finds no `autoexec.ipxe` falls through to plain `netboot()` and loses FOG's multi-NIC and proxyDHCP handling, so they must not be served to clients until the file is in place.
+A copy of `autoexec.ipxe` ships in every directory holding an EFI binary. FOG's
+installer hard-links them so there is exactly one script however many paths
+reach it.
 
-This is also the only variant that can work under UEFI Secure Boot, since an embedded script is not permitted in a Secure Boot build. See the [Secure Boot how-to](https://docs.fogproject.org/kb/how-tos/secure-boot-signing/).
+**Do not put an `EMBED=` binary in a directory an EMBED-less one can fall back
+to.** An embedded binary still *downloads* `autoexec.ipxe` — `efi_probe()`
+registers it before any driver is connected — but never runs it, so nothing
+unregisters it and `initrd_load_all()` concatenates it into the ramdisk ahead
+of `init.xz`. The kernel then panics on the missing compression magic. This is
+why `EMBED=` is gone from every EFI target rather than most of them.
+
+Legacy BIOS is the exception and keeps `EMBED=`: it has no
+`efi_autoexec_load()`, so there is no downloaded script for it to read. That is
+also why `10secdelay/` still exists and now holds BIOS files only — on EFI the
+delay is an installer option that inserts a `sleep` into `autoexec.ipxe`.
 
 ## Secure Boot
 

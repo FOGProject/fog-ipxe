@@ -69,7 +69,7 @@ jobs:
         # One tarball, not 85 loose assets. Release assets cannot contain
         # directories, so publishing them individually would mean mangling
         # every path into a flat name and teaching the installer to unmangle
-        # it. The tree has structure -- i386-efi/, arm64-efi/, autoexec/ --
+        # it. The tree has structure -- i386-efi/, arm64-efi/, 10secdelay/ --
         # and a tarball preserves it for free. A single checksum then covers
         # every file, rather than 85 chances to get one verification wrong.
         run: |
