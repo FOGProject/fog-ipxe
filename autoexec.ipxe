@@ -1,18 +1,27 @@
 #!ipxe
-# Boot script for the EMBED-less EFI binaries in packages/tftp/autoexec/.
+# The boot script for every EFI binary FOG ships.
 #
-# iPXE 2.0.0's efi_autoexec_load() downloads "autoexec.ipxe" from the current
-# working URI -- i.e. the TFTP directory the .efi binary itself was loaded from
-# -- before any driver is connected, and runs it because first_image() then
-# finds no embedded image ahead of it. That is the whole point of this variant:
-# the boot logic lives in a text file the server can rewrite, instead of being
-# compiled into every binary. Changing the sleep below no longer needs a
-# rebuild, which is why there is no autoexec equivalent of 10secdelay/.
+# iPXE's efi_autoexec_load() downloads "autoexec.ipxe" from the current working
+# URI -- the TFTP directory the .efi binary itself was loaded from -- before any
+# driver is connected, and runs it because first_image() finds no embedded image
+# ahead of it. None of FOG's EFI binaries embed one, deliberately, so this file
+# is not a variant any more: it is how they boot. A site changes its boot logic
+# by editing this file, with no toolchain and no rebuild.
 #
-# Keep this in step with src/ipxe/src/ipxescript -- the binaries that embed
-# that script and the ones that fetch this one must behave identically, or
-# which file a site is using becomes a variable in every bug report. Refs
-# GH-957.
+# The installer hard-links one copy into every directory holding an EFI binary
+# -- the TFTP root, i386-efi/, arm64-efi/ and the secureboot/ tree -- so there
+# is exactly one script however many paths reach it. efi_autoexec_network()
+# looks in the binary's own directory first and only then falls back to
+# /autoexec.ipxe, so the per-directory copies just save a failed request.
+#
+# The 10-second STP/powersave delay is an installer option (--boot-delay) that
+# inserts a sleep below, not a second set of binaries. Legacy BIOS still needs
+# its own build for that -- 10secdelay/ -- because BIOS has no
+# efi_autoexec_load() and so has no script to edit.
+#
+# Keep this in step with src/ipxescript, the script the BIOS binaries embed:
+# the two must behave identically, or which platform a site booted becomes a
+# variable in every bug report. Refs GH-957.
 echo Checking net0 for DHCP...
 isset ${net0/mac} && ifopen net0 && dhcp net0 || goto dhcpnet1
 echo Received DHCP answer on interface net0 && goto proxycheck

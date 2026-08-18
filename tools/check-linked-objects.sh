@@ -75,11 +75,13 @@ BASELINEDIR="${FOGDIR}/tools/linked-objects"
 # separate headers (src/config vs src-efi/config), and arm64 is a separate
 # compile of the EFI tree whose object set differs by architecture.
 #
-# buildipxe.sh builds the EFI targets three times over (EMBED=ipxescript, then
-# ipxescript10sec, then EMBED-less for autoexec), so these maps are from its
-# last pass. That is fine and stable: EMBED changes which script bytes land in
-# embedded.o, not which objects the linker pulls in, and config.o references
-# obj_embedded either way.
+# The EFI targets are built once, EMBED-less -- see the long note in
+# buildipxe.sh. The BIOS targets are still built twice (EMBED=ipxescript, then
+# ipxescript10sec) so undionly.kkpxe's map is from that second pass. That is
+# fine and stable: EMBED changes which script bytes land in embedded.o, not
+# which objects the linker pulls in, and config.o references obj_embedded
+# either way -- which is also why dropping EMBED from the EFI builds did not
+# move these baselines.
 TARGETS=(
     "undionly.kkpxe:${BASE}/ipxe/src/bin/undionly.kkpxe.tmp.map"
     "x86_64-efi-snponly.efi:${BASE}/ipxe-efi/src/bin-x86_64-efi/snponly.efi.tmp.map"

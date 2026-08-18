@@ -84,7 +84,7 @@ apply_fog_patches() {
 
 # The output tree is emitted in exactly fogproject's packages/tftp layout, so
 # the installer can copy it over its tftpdir unchanged.
-mkdir -p "$BASE" ${OUTDIR}/{10secdelay/{i386-efi,arm64-efi},i386-efi,arm64-efi,autoexec/{i386-efi,arm64-efi}}
+mkdir -p "$BASE" ${OUTDIR}/{10secdelay,i386-efi,arm64-efi}
 
 if [[ -d ${BASE}/ipxe ]]; then
   cd ${BASE}/ipxe
@@ -160,8 +160,6 @@ apply_fog_patches ${BASE}/ipxe-efi
 
 # Overlay this repository's headers and boot scripts onto the clone.
 echo "Copy (overwrite) iPXE headers and scripts..."
-cp ${FOGDIR}/src-efi/ipxescript .
-cp ${FOGDIR}/src-efi/ipxescript10sec .
 cp ${FOGDIR}/src-efi/config/general.h config/
 cp ${FOGDIR}/src-efi/config/settings.h config/
 cp ${FOGDIR}/src-efi/config/console.h config/
@@ -172,12 +170,48 @@ cp ${FOGDIR}/src-efi/config/console.h config/
 mkdir -p config/local
 cp ${FOGDIR}/src-efi/config/local/usb.h config/local/
 
-# Build the files
-make -j$(nproc) EMBED=ipxescript bin-{i386,x86_64}-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
+# Build the EFI binaries. One pass, no EMBED.
+#
+# WHY NO EMBED HERE
+#
+# With no script compiled in, first_image() finds nothing at INIT_LATE, so
+# efi_probe()'s efi_autoexec_load() gets to register autoexec.ipxe and ipxe()
+# executes that instead. Three things follow, and they are the whole reason
+# this is the only EFI build now:
+#
+#   1. A site can change its boot logic without a toolchain. The script is a
+#      file on the TFTP server, not bytes inside 15 binaries.
+#
+#   2. It is the only shape that works under Secure Boot: efi_autoexec.c is
+#      FILE_SECBOOT ( PERMITTED ), an embedded script is not.
+#
+#   3. It is the only shape that can safely share a directory with
+#      autoexec.ipxe. An EMBED-marked binary still DOWNLOADS the script --
+#      efi_probe() registers it unconditionally -- but never executes it,
+#      because first_image() returns the embedded one ahead of it. Nothing
+#      unregisters it, so initrd_load_all() concatenates it into the ramdisk
+#      ahead of init.xz and the kernel panics on the missing compression
+#      magic. An EMBED-less binary EXECUTES the script, and image_exec()
+#      unregisters it for the duration, so it is gone by the time boot runs.
+#
+# (3) is why the previous layout had to keep the EMBED-less binaries in a
+# separate autoexec/ directory and delete any autoexec.ipxe from the TFTP
+# root: efi_autoexec_network() falls back to /autoexec.ipxe when the
+# binary's own directory has none, so ONE embedded EFI binary anywhere in the
+# tree was enough to poison every client that fell back to the root. Removing
+# EMBED from every EFI target removes that constraint, which is what lets the
+# autoexec/ duplicate tree go away and autoexec.ipxe become the normal
+# mechanism rather than an opt-in.
+#
+# The 10-second delay variant goes with it. It differed from the default by
+# two lines -- an echo and a sleep -- which is now an edit the installer makes
+# to autoexec.ipxe rather than a second copy of every binary. 10secdelay/
+# keeps its BIOS files, which genuinely do need a separate build because BIOS
+# has no efi_autoexec_load() and therefore no script to edit.
+make -j$(nproc) bin-{i386,x86_64}-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
 [[ $? -eq 0 ]] || exit 80
 
-# Apply USB configuration for ARM64 build
-make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 EMBED=ipxescript bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
+make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
 [[ $? -eq 0 ]] || exit 82
 
 # Collect into the output tree
@@ -185,47 +219,10 @@ cp bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/arm64-efi/
 cp bin-i386-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/i386-efi/
 cp bin-x86_64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/
 
-# Build with 10 second delay
-make -j$(nproc) EMBED=ipxescript10sec bin-{i386,x86_64}-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
-[[ $? -eq 0 ]] || exit 91
-
-make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 EMBED=ipxescript10sec bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
-[[ $? -eq 0 ]] || exit 93
-
-# Collect into the output tree
-cp bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/10secdelay/arm64-efi/
-cp bin-i386-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/10secdelay/i386-efi/
-cp bin-x86_64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/10secdelay/
-
-# Build the EMBED-less EFI variant.
-#
-# With no embedded script, first_image() finds nothing at INIT_LATE, so
-# efi_probe()'s efi_autoexec_load() gets to register autoexec.ipxe and ipxe()
-# executes that instead. The script is then a file on the TFTP server rather
-# than something compiled in, so a site can change its boot logic without a
-# toolchain. This is also the only build that can work under Secure Boot, since
-# efi_autoexec.c is FILE_SECBOOT ( PERMITTED ) while an embedded script is not.
-#
-# Shipped alongside the embedded binaries rather than replacing them: an
-# existing server has no autoexec.ipxe in its TFTP root, and a binary that
-# finds none falls through to plain netboot(), losing FOG's multi-NIC and
-# proxyDHCP handling. Opting in is a DHCP filename change. Refs GH-957.
-#
-# There is deliberately no 10secdelay counterpart -- with the script on disk,
-# the delay is a two-line edit to autoexec.ipxe.
-make -j$(nproc) bin-{i386,x86_64}-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
-[[ $? -eq 0 ]] || exit 95
-
-make -j$(nproc) CROSS_COMPILE=aarch64-linux-gnu- ARCH=arm64 bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${BUILDOPTS}
-[[ $? -eq 0 ]] || exit 97
-
-cp bin-arm64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/autoexec/arm64-efi/
-cp bin-i386-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/autoexec/i386-efi/
-cp bin-x86_64-efi/{snp{,only},ipxe,intel,realtek}.efi ${OUTDIR}/autoexec/
-
-# One copy per directory: efi_autoexec_network() asks for autoexec.ipxe
-# relative to the binary's own URI first and only then retries at the TFTP
-# root, so a per-directory copy saves a failed request on every boot.
-for d in autoexec autoexec/i386-efi autoexec/arm64-efi; do
+# One copy per directory holding an EFI binary. efi_autoexec_network() asks for
+# autoexec.ipxe relative to the binary's own URI first and only then retries at
+# the TFTP root, so a per-directory copy saves a failed request on every boot.
+# The installer hard-links these together afterwards so they cannot drift.
+for d in . i386-efi arm64-efi; do
   cp ${FOGDIR}/autoexec.ipxe ${OUTDIR}/$d/
 done
