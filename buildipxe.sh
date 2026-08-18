@@ -52,6 +52,36 @@ FOGDIR=$(dirname "$SCRIPT")
 BASE="${FOGDIR}/build"
 OUTDIR="${2:-${FOGDIR}/output}"
 
+# FOG-carried patches against the pinned upstream tag.
+#
+# This repository overlays CONFIGURATION onto a pristine upstream checkout; it
+# does not fork it. patches/ is the one place a C change can live, and it earns
+# that only when upstream cannot yet supply the behaviour and FOG cannot ship
+# without it.
+#
+# Applied after the reset/checkout above, never before: an existing clone is
+# reset --hard and clean -fd'd on every run, so each build starts from pristine
+# upstream and re-applies the full set. Nothing accumulates, and a patch that
+# has stopped applying fails the build loudly instead of silently producing a
+# binary without it.
+#
+# Because IPXEVER is a fixed tag these do not rot between builds. They need
+# revisiting only when the pin moves, which is a deliberate edit.
+apply_fog_patches() {
+  local repo="$1" p
+  [[ -d ${FOGDIR}/patches ]] || return 0
+  shopt -s nullglob
+  for p in ${FOGDIR}/patches/*.patch; do
+    echo "Applying $(basename "$p") to $(basename "$repo")..."
+    git -C "$repo" apply "$p" || {
+      echo "ERROR: $(basename "$p") does not apply to ${IPXEVER}." >&2
+      echo "       Rebase it, or drop it if upstream has taken the change." >&2
+      exit 41
+    }
+  done
+  shopt -u nullglob
+}
+
 # The output tree is emitted in exactly fogproject's packages/tftp layout, so
 # the installer can copy it over its tftpdir unchanged.
 mkdir -p "$BASE" ${OUTDIR}/{10secdelay/{i386-efi,arm64-efi},i386-efi,arm64-efi,autoexec/{i386-efi,arm64-efi}}
@@ -71,6 +101,7 @@ else
   git clone --branch ${IPXEVER} ${IPXEGIT} ${BASE}/ipxe
   cd ${BASE}/ipxe/src/
 fi
+apply_fog_patches ${BASE}/ipxe
 
 
 # Overlay this repository's headers and boot scripts onto the clone.
@@ -125,6 +156,7 @@ else
   git clone --branch ${IPXEVER} ${IPXEGIT} ${BASE}/ipxe-efi
   cd ${BASE}/ipxe-efi/src/
 fi
+apply_fog_patches ${BASE}/ipxe-efi
 
 # Overlay this repository's headers and boot scripts onto the clone.
 echo "Copy (overwrite) iPXE headers and scripts..."
