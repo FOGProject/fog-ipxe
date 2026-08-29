@@ -6,13 +6,38 @@
 # -- before any driver is connected, and runs it because first_image() then
 # finds no embedded image ahead of it. That is the whole point of this variant:
 # the boot logic lives in a text file the server can rewrite, instead of being
-# compiled into every binary. Changing the sleep below no longer needs a
-# rebuild, which is why there is no autoexec equivalent of 10secdelay/.
+# compiled into every binary. Changing the pre-DHCP sleep below no longer needs
+# a rebuild, which is why there is no autoexec equivalent of 10secdelay/.
 #
 # Keep this in step with src/ipxe/src/ipxescript -- the binaries that embed
 # that script and the ones that fetch this one must behave identically, or
 # which file a site is using becomes a variable in every bug report. Refs
 # GH-957.
+
+# PRE-DHCP DELAY -- uncomment the last two lines of this block if you need one.
+#
+# Some switches take several seconds to bring a port out of STP listening or out
+# of powersave, and iPXE's first DHCP attempt goes out before that. The symptom
+# is a client reporting no DHCP answer on a link that is perfectly fine a few
+# seconds later.
+#
+# The header above has always said the delay is an edit to this file rather than
+# a second set of binaries. It never shipped the lines to edit, so there was
+# nothing here to change and no indication of what to write. There is now.
+#
+# THIS FILE ONLY AFFECTS THE autoexec/ BINARIES -- the EMBED-less build, which is
+# the only one that reads a downloaded script, and which a site opts into with a
+# DHCP filename change. If your DHCP still hands out a boot file from the TFTP
+# ROOT, that binary has its script compiled in and cannot read this file at all:
+# point DHCP at 10secdelay/<the same filename> instead, which is the identical
+# build with a ten-second sleep embedded. That is the only route for legacy BIOS
+# either way, since BIOS has no efi_autoexec_load().
+#
+# THE EDIT IS LOST WHEN YOU RE-RUN installfog.sh, which copies its staged iPXE
+# tree over this one unconditionally. Keep a copy and re-apply it after an
+# upgrade.
+#echo Sleeping 10 seconds to wait for STP/Powersave to switchoff and on
+#sleep 10
 echo Checking net0 for DHCP...
 isset ${net0/mac} && ifopen net0 && dhcp net0 || goto dhcpnet1
 echo Received DHCP answer on interface net0 && goto proxycheck
