@@ -1,0 +1,66 @@
+diff --git a/src/interface/efi/efi_settings.c b/src/interface/efi/efi_settings.c
+index 95fe2c0..efe39d8 100644
+--- a/src/interface/efi/efi_settings.c
++++ b/src/interface/efi/efi_settings.c
+@@ -58,6 +58,15 @@ static int efivars_applies ( struct settings *settings __unused,
+ 	return ( setting->scope == &efivars_scope );
+ }
+ 
++/**
++ * Maximum number of EFI variable names to walk
++ *
++ * Some firmware never reports the end of the variable list, and keeps
++ * returning names forever.  No real variable store is this large, so
++ * reaching the limit means the firmware is looping.
++ */
++#define EFIVARS_MAX 65536
++
+ /**
+  * Find first matching EFI variable name
+  *
+@@ -71,6 +80,7 @@ static int efivars_find ( const CHAR16 *wname, EFI_GUID *guid ) {
+ 	CHAR16 *buf;
+ 	CHAR16 *tmp;
+ 	UINTN size;
++	unsigned int count = 0;
+ 	EFI_STATUS efirc;
+ 	int rc;
+ 
+@@ -83,6 +93,14 @@ static int efivars_find ( const CHAR16 *wname, EFI_GUID *guid ) {
+ 	/* Iterate over all veriables */
+ 	while ( 1 ) {
+ 
++		/* Stop if the firmware never ends the list */
++		if ( ++count > EFIVARS_MAX ) {
++			DBGC ( &efivars, "EFIVARS walked %d names without "
++			       "reaching the end\n", EFIVARS_MAX );
++			rc = -ELOOP;
++			break;
++		}
++
+ 		/* Get next variable name */
+ 		efirc = rs->GetNextVariableName ( &size, buf, guid );
+ 		if ( efirc == EFI_BUFFER_TOO_SMALL ) {
+@@ -145,9 +163,19 @@ static int efivars_fetch ( struct settings *settings __unused,
+ 	/* Convert name to UCS-2 */
+ 	efi_snprintf ( wname, sizeof ( wname ), "%s", setting->name );
+ 
+-	/* Find variable GUID */
+-	if ( ( rc = efivars_find ( wname, &guid ) ) != 0 )
+-		goto err_find;
++	/* Try the global variable GUID first, which needs no walk of
++	 * the variable store.  SecureBoot, SetupMode and the other
++	 * UEFI-defined variables all live there.
++	 */
++	memcpy ( &guid, &efi_global_variable, sizeof ( guid ) );
++	size = 0;
++	efirc = rs->GetVariable ( wname, &guid, &attrs, &size, NULL );
++	if ( efirc != EFI_BUFFER_TOO_SMALL ) {
++
++		/* Find variable GUID */
++		if ( ( rc = efivars_find ( wname, &guid ) ) != 0 )
++			goto err_find;
++	}
+ 
+ 	/* Get variable length */
+ 	size = 0;
