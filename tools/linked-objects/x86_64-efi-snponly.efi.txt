@@ -64,6 +64,7 @@ dhcp_cmd.o
 dhcpmgmt.o
 dhcpopts.o
 dhcppkt.o
+dhcpv6.o
 dhe.o
 dhe_rsa_aes_cbc_sha1.o
 dhe_rsa_aes_cbc_sha256.o
@@ -170,6 +171,7 @@ httpntlm.o
 https.o
 icmp.o
 icmpv4.o
+icmpv6.o
 ifmgmt.o
 ifmgmt_cmd.o
 image.o
@@ -187,6 +189,7 @@ iobuf.o
 ipstat.o
 ipstat_cmd.o
 ipv4.o
+ipv6.o
 job.o
 jumpscroll.o
 keymap.o
@@ -208,6 +211,7 @@ mnpnet.o
 monojob.o
 mount.o
 mucurses.o
+ndp.o
 neighbour.o
 neighbour_cmd.o
 neighmgmt.o
@@ -280,6 +284,7 @@ rootcert.o
 route.o
 route_cmd.o
 route_ipv4.o
+route_ipv6.o
 rsa.o
 rsa_aes_cbc_sha1.o
 rsa_aes_cbc_sha256.o
