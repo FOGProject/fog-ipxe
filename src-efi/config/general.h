@@ -22,7 +22,12 @@ FILE_SECBOOT ( PERMITTED );
 #define NET_PROTO_EAPOL		/* EAP over LAN protocol */
 //#define NET_PROTO_FCOE	/* Fibre Channel over Ethernet protocol */
 #define NET_PROTO_IPV4		/* IPv4 protocol */
-//#define NET_PROTO_IPV6		/* IPv6 protocol */
+/* FOG deviation: upstream ships IPv6 commented out. FOG turns it on for EFI so
+ * a client on an IPv6-only segment can boot (FOGProject/fogproject#2152).
+ * autoexec.ipxe pins its IPv4 steps to "ifconf -c dhcp" and starts IPv6 only
+ * after they all fail, so an IPv4 site boots as before. BIOS still undefines
+ * it below. */
+#define NET_PROTO_IPV6		/* IPv6 protocol */
 #define NET_PROTO_LACP		/* Link Aggregation control protocol */
 #define NET_PROTO_LLDP		/* Link Layer Discovery protocol */
 #define NET_PROTO_STP		/* Spanning Tree protocol */
