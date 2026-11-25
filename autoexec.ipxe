@@ -26,12 +26,14 @@
 #
 # Each IPv4 step names its configurator: "ifconf -c dhcp", not "dhcp". In
 # iPXE 2.x "dhcp" is a synonym for "ifconf" with every configurator, IPv6
-# included, and the EFI builds have IPv6. A bare "dhcp" then has two effects:
+# included. The EFI builds have IPv6, so a bare "dhcp" has two effects:
 #   - A NIC that sees only an IPv6 router advertisement counts as configured,
 #     so the script stops on it and never tries the next NIC.
 #   - ifconf waits for every configurator to finish, so a dual-stack segment
 #     also waits for DHCPv6.
 # With "-c dhcp" each IPv4 step does what "dhcp" did before IPv6 was built in.
+# src/ipxescript keeps a bare "dhcp". BIOS builds have no IPv6, so there the
+# two forms are the same and the scripts still behave the same.
 echo Checking net0 for DHCP...
 isset ${net0/mac} && ifopen net0 && ifconf -c dhcp net0 || goto dhcpnet1
 echo Received DHCP answer on interface net0 && goto proxycheck
@@ -54,8 +56,9 @@ ifconf -c dhcp && goto proxycheck || goto ipv6
 # every IPv4 step fails, so an IPv4 or dual-stack site never reaches it. The
 # ipv6 configurator waits for a router advertisement, then asks DHCPv6.
 # DHCPv6 has no next-server. The DHCPv6 server gives the iPXE user-class a
-# bootfile-url (option 59) that is the whole URL of default.ipxe, and iPXE
-# stores it as ${filename}.
+# bootfile-url (option 59) that is the whole URL of default.ipxe. iPXE
+# stores that URL as ${filename}. On a segment with no DHCP and no router
+# advertisement, this step adds about 4 s before the DHCP error prompt.
 :ipv6
 echo No IPv4 DHCP answer, trying IPv6...
 ifconf -c ipv6 || goto dhcperror
